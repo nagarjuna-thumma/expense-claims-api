@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: expense-claims-api
+  datasource:
+    url: jdbc:postgresql://localhost:5433/claims
+    username: app
+    password: app
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8180/realms/expenses
+
+rate-limit:
+  requests: 30
+  period: 1m
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
