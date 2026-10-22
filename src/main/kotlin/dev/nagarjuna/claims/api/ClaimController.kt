@@ -1,5 +1,6 @@
 package dev.nagarjuna.claims.api
 
+import dev.nagarjuna.claims.audit.AuditEntry
 import dev.nagarjuna.claims.domain.Claim
 import dev.nagarjuna.claims.domain.ClaimService
 import dev.nagarjuna.claims.security.CurrentUser
@@ -41,6 +42,12 @@ data class ClaimResponse(
     }
 }
 
+data class HistoryEntry(val seq: Long, val action: String, val actor: String, val amount: BigDecimal, val at: Instant) {
+    companion object {
+        fun from(e: AuditEntry) = HistoryEntry(e.seq, e.action.name, e.actorName, e.amount, e.occurredAt)
+    }
+}
+
 @RestController
 @RequestMapping("/claims")
 class ClaimController(private val service: ClaimService) {
@@ -63,6 +70,10 @@ class ClaimController(private val service: ClaimService) {
     @GetMapping("/{id}")
     fun get(auth: JwtAuthenticationToken, @PathVariable id: UUID): ClaimResponse =
         ClaimResponse.from(service.get(CurrentUser.from(auth), id))
+
+    @GetMapping("/{id}/history")
+    fun history(auth: JwtAuthenticationToken, @PathVariable id: UUID): List<HistoryEntry> =
+        service.history(CurrentUser.from(auth), id).map(HistoryEntry::from)
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('MANAGER')")

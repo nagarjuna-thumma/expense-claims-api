@@ -5,7 +5,8 @@
   "roles": {
     "realm": [
       { "name": "employee", "description": "Can submit and view their own claims" },
-      { "name": "manager", "description": "Can view and decide on anyone's claims" }
+      { "name": "manager", "description": "Can view and decide on anyone's claims" },
+      { "name": "auditor", "description": "Can verify the audit log, cannot submit or decide claims" }
     ]
   },
   "clients": [
@@ -48,6 +49,16 @@
       "emailVerified": true,
       "credentials": [{ "type": "password", "value": "carol", "temporary": false }],
       "realmRoles": ["employee"]
+    },
+    {
+      "username": "dave",
+      "email": "dave@example.com",
+      "firstName": "Dave",
+      "lastName": "Auditor",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "dave", "temporary": false }],
+      "realmRoles": ["auditor"]
     }
   ]
 }

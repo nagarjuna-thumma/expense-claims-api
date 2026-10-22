@@ -37,6 +37,7 @@ class ClaimApiTest(
     private val alice = user("alice", "EMPLOYEE")
     private val carol = user("carol", "EMPLOYEE")
     private val bob = user("bob", "EMPLOYEE", "MANAGER")
+    private val dave = user("dave", "AUDITOR")
 
     private fun submit(as_: org.springframework.test.web.servlet.request.RequestPostProcessor, amount: String = "42.50"): String {
         val body = mvc.post("/claims") {
@@ -110,5 +111,63 @@ class ClaimApiTest(
             contentType = MediaType.APPLICATION_JSON
             content = """{"description":"Too much","amount":-5}"""
         }.andExpect { status { isBadRequest() } }
+    }
+
+    @Test
+    fun `claim history shows who did what`() {
+        val id = submit(alice)
+        mvc.post("/claims/$id/approve") { with(bob) }.andExpect { status { isOk() } }
+
+        mvc.get("/claims/$id/history") { with(alice) }.andExpect {
+            status { isOk() }
+            jsonPath("$.length()") { value(2) }
+            jsonPath("$[0].action") { value("SUBMITTED") }
+            jsonPath("$[0].actor") { value("alice") }
+            jsonPath("$[1].action") { value("APPROVED") }
+            jsonPath("$[1].actor") { value("bob") }
+        }
+    }
+
+    @Test
+    fun `a blocked self-approval is still recorded`() {
+        val id = submit(bob)
+
+        mvc.post("/claims/$id/approve") { with(bob) }.andExpect { status { isForbidden() } }
+
+        mvc.get("/claims/$id/history") { with(bob) }.andExpect {
+            jsonPath("$[1].action") { value("SELF_APPROVAL_BLOCKED") }
+            jsonPath("$[1].actor") { value("bob") }
+        }
+        mvc.get("/claims/$id") { with(bob) }.andExpect { jsonPath("$.status") { value("SUBMITTED") } }
+    }
+
+    @Test
+    fun `history follows the same visibility rule as the claim`() {
+        val id = submit(alice)
+
+        mvc.get("/claims/$id/history") { with(carol) }.andExpect { status { isNotFound() } }
+    }
+
+    @Test
+    fun `only auditors can verify the audit log`() {
+        submit(alice)
+
+        mvc.get("/audit/verify") { with(bob) }.andExpect { status { isForbidden() } }
+        mvc.get("/audit/verify") { with(dave) }.andExpect {
+            status { isOk() }
+            jsonPath("$.valid") { value(true) }
+        }
+    }
+
+    @Test
+    fun `auditors cannot submit or decide claims`() {
+        val id = submit(alice)
+
+        mvc.post("/claims") {
+            with(dave)
+            contentType = MediaType.APPLICATION_JSON
+            content = """{"description":"Lunch","amount":12}"""
+        }.andExpect { status { isForbidden() } }
+        mvc.post("/claims/$id/approve") { with(dave) }.andExpect { status { isForbidden() } }
     }
 }
