@@ -17,3 +17,36 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build and run all tests
         run: ./gradlew build
+
+  kubernetes:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build image
+        run: |
+          ./gradlew bootJar
+          docker build -t expense-claims-api:latest .
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: expense-claims
+      - name: Deploy
+        run: |
+          kind load docker-image expense-claims-api:latest --name expense-claims
+          kubectl kustomize --load-restrictor LoadRestrictionsNone k8s | kubectl apply -f -
+          kubectl -n expense-claims rollout status statefulset/postgres --timeout=180s
+          kubectl -n expense-claims rollout status deployment/keycloak --timeout=300s
+          kubectl -n expense-claims rollout status deployment/expense-claims-api --timeout=300s
+      - name: Smoke test
+        run: ./k8s/smoke-test.sh
+      - name: Show pods on failure
+        if: failure()
+        run: |
+          kubectl -n expense-claims get pods -o wide
+          kubectl -n expense-claims describe pods | tail -100
+          kubectl -n expense-claims logs deploy/expense-claims-api --tail=100

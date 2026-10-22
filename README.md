@@ -92,6 +92,24 @@ curl -s localhost:8080/claims/mine -H "Authorization: Bearer $TOKEN"
 
 The password grant is enabled on the `expenses-cli` client only to make local testing easy. A real front end would use the authorization code flow with PKCE.
 
+## Kubernetes
+
+[`k8s/`](k8s) has Kustomize manifests for the API, plus a single Postgres and a dev-mode Keycloak that imports the same realm file, so it runs on a laptop cluster.
+
+```bash
+./gradlew bootJar && docker build -t expense-claims-api:latest .
+kind load docker-image expense-claims-api:latest
+kubectl kustomize --load-restrictor LoadRestrictionsNone k8s | kubectl apply -f -
+```
+
+- **Two API replicas** sharing one audit chain. The advisory lock keeps their audit writes in order.
+- **A fixed Keycloak hostname** (`KC_HOSTNAME`). Tokens carry the same issuer whether Keycloak is reached inside the cluster or through a port-forward, so issuer validation in the API doesn't break.
+- **Startup, liveness and readiness probes** on Spring Boot's health groups. Only those health paths are open without a token.
+- **Graceful shutdown** with a short `preStop` pause, `maxUnavailable: 0` rollouts and a PodDisruptionBudget.
+- **Locked-down containers.** They run as non-root with a read-only root filesystem and no capabilities.
+
+CI deploys this to a [kind](https://kind.sigs.k8s.io) cluster on every push and runs [`k8s/smoke-test.sh`](k8s/smoke-test.sh). With real Keycloak tokens, alice submits a claim, bob approves it, and dave verifies the audit chain.
+
 ## Endpoints
 
 | Method | Path | Role |
@@ -118,11 +136,11 @@ Errors come back as RFC 7807 problem details.
 - `AuditChainTest` runs 40 claims through 8 threads and checks the chain is unbroken. It also checks that the trigger blocks edits, and that an edit made with the trigger turned off is caught.
 - `RateLimiterTest`, `KeycloakRoleConverterTest` and `AuditHashTest` are plain unit tests.
 
-GitHub Actions runs everything on every push.
+GitHub Actions runs everything on every push, then deploys to kind and runs the smoke test.
 
 ## Stack
 
-Kotlin 2.2 · Spring Boot 3.5 · Spring Security OAuth2 Resource Server · Keycloak 26 · PostgreSQL · Flyway · Testcontainers · Gradle (Kotlin DSL) · GitHub Actions
+Kotlin 2.2 · Spring Boot 3.5 · Spring Security OAuth2 Resource Server · Keycloak 26 · PostgreSQL · Flyway · Testcontainers · Docker · Kubernetes · Gradle (Kotlin DSL) · GitHub Actions
 
 ## What I'd change for production
 

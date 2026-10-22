@@ -23,7 +23,7 @@ class SecurityConfig {
             .csrf { it.disable() } // stateless API with bearer tokens, no cookies to protect
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests {
-                it.requestMatchers("/actuator/health").permitAll()
+                it.requestMatchers("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                 it.anyRequest().authenticated()
             }
             .oauth2ResourceServer { it.jwt { jwt -> jwt.jwtAuthenticationConverter(KeycloakRoleConverter()) } }
