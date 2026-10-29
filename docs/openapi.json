@@ -1,0 +1,380 @@
+{
+  "components" : {
+    "schemas" : {
+      "AuditVerification" : {
+        "properties" : {
+          "entries" : {
+            "format" : "int64",
+            "type" : "integer"
+          },
+          "firstBadSeq" : {
+            "format" : "int64",
+            "type" : [ "integer", "null" ]
+          },
+          "problem" : {
+            "type" : [ "string", "null" ]
+          },
+          "valid" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "entries", "valid" ],
+        "type" : "object"
+      },
+      "ClaimResponse" : {
+        "properties" : {
+          "amount" : {
+            "type" : "number"
+          },
+          "decidedBy" : {
+            "type" : [ "string", "null" ]
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "id" : {
+            "format" : "uuid",
+            "type" : "string"
+          },
+          "owner" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "submittedAt" : {
+            "format" : "date-time",
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "description", "id", "owner", "status", "submittedAt" ],
+        "type" : "object"
+      },
+      "HistoryEntry" : {
+        "properties" : {
+          "action" : {
+            "type" : "string"
+          },
+          "actor" : {
+            "type" : "string"
+          },
+          "amount" : {
+            "type" : "number"
+          },
+          "at" : {
+            "format" : "date-time",
+            "type" : "string"
+          },
+          "seq" : {
+            "format" : "int64",
+            "type" : "integer"
+          }
+        },
+        "required" : [ "action", "actor", "amount", "at", "seq" ],
+        "type" : "object"
+      },
+      "SubmitClaimRequest" : {
+        "properties" : {
+          "amount" : {
+            "maximum" : 10000.0,
+            "minimum" : 0.01,
+            "type" : "number"
+          },
+          "description" : {
+            "maxLength" : 200,
+            "minLength" : 0,
+            "type" : "string"
+          }
+        },
+        "required" : [ "amount", "description" ],
+        "type" : "object"
+      }
+    },
+    "securitySchemes" : {
+      "keycloak-jwt" : {
+        "bearerFormat" : "JWT",
+        "scheme" : "bearer",
+        "type" : "http"
+      }
+    }
+  },
+  "info" : {
+    "description" : "Employees submit expense claims, managers approve or reject them, auditors verify the audit log. All calls need a Keycloak-issued JWT.",
+    "title" : "Expense claims API",
+    "version" : "0.1.0"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "/audit/verify" : {
+      "get" : {
+        "description" : "Auditor role. Reports the first entry that doesn't match.",
+        "operationId" : "verify",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AuditVerification"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Check the audit log's hash chain",
+        "tags" : [ "Audit" ]
+      }
+    },
+    "/claims" : {
+      "post" : {
+        "description" : "Employee role.",
+        "operationId" : "submit",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SubmitClaimRequest"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "Created"
+          },
+          "400" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "Missing description or amount outside 0.01 to 10,000"
+          }
+        },
+        "summary" : "Submit a claim",
+        "tags" : [ "Claims" ]
+      }
+    },
+    "/claims/mine" : {
+      "get" : {
+        "operationId" : "mine",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ClaimResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "List my claims",
+        "tags" : [ "Claims" ]
+      }
+    },
+    "/claims/pending" : {
+      "get" : {
+        "description" : "Manager role.",
+        "operationId" : "pending",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/ClaimResponse"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "List claims waiting for a decision",
+        "tags" : [ "Claims" ]
+      }
+    },
+    "/claims/{id}" : {
+      "get" : {
+        "description" : "Owners see their own claims, managers see any claim.",
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "404" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "No such claim, or it belongs to someone else. Same answer either way, so ids can't be probed."
+          }
+        },
+        "summary" : "Get one claim",
+        "tags" : [ "Claims" ]
+      }
+    },
+    "/claims/{id}/approve" : {
+      "post" : {
+        "description" : "Manager role. Managers can't approve their own claims.",
+        "operationId" : "approve",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "403" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "It's your own claim"
+          },
+          "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "Already decided"
+          }
+        },
+        "summary" : "Approve a claim",
+        "tags" : [ "Claims" ]
+      }
+    },
+    "/claims/{id}/history" : {
+      "get" : {
+        "description" : "Same visibility rules as getting the claim.",
+        "operationId" : "history",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "items" : {
+                    "$ref" : "#/components/schemas/HistoryEntry"
+                  },
+                  "type" : "array"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Audit trail of one claim",
+        "tags" : [ "Claims" ]
+      }
+    },
+    "/claims/{id}/reject" : {
+      "post" : {
+        "description" : "Manager role.",
+        "operationId" : "reject",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "format" : "uuid",
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "OK"
+          },
+          "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ClaimResponse"
+                }
+              }
+            },
+            "description" : "Already decided"
+          }
+        },
+        "summary" : "Reject a claim",
+        "tags" : [ "Claims" ]
+      }
+    }
+  },
+  "security" : [ {
+    "keycloak-jwt" : [ ]
+  } ],
+  "servers" : [ {
+    "description" : "Local",
+    "url" : "http://localhost:8080"
+  } ]
+}
