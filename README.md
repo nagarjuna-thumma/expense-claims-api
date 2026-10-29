@@ -67,6 +67,18 @@ A hash chain on its own can still be rewritten from the edited row onward. In pr
 
 Writers take a Postgres advisory lock so each new row sees the previous hash. That means audit writes from all instances happen one at a time. At this volume that's fine, and `AuditChainTest` checks that 8 threads writing at once still produce an unbroken chain.
 
+## OpenAPI
+
+The API documents itself with springdoc. With the app running, Swagger UI is at http://localhost:8080/swagger-ui.html and the raw spec at `/v3/api-docs`. Both are public, but every operation in them still needs a token.
+
+The spec is also committed as [`docs/openapi.json`](docs/openapi.json). `OpenApiContractTest` compares it to what the running app serves and fails if they differ, so any change to the API shows up in a pull request as a diff of the contract, not only of the Kotlin code. To accept a change, run `UPDATE_OPENAPI=true ./gradlew test` and commit the new file.
+
+## Web front end
+
+[`web/`](web) is an Angular app for the same API: employees submit claims and follow them, managers approve or reject them. It logs in through Keycloak with the authorization code flow and PKCE, and its TypeScript types are generated from `docs/openapi.json`. See [web/README.md](web/README.md).
+
+![Approvals page](docs/web-approvals.png)
+
 ## Running it
 
 You need Java 21 and Docker.
@@ -90,7 +102,13 @@ curl -s -X POST localhost:8080/claims -H "Authorization: Bearer $TOKEN" \
 curl -s localhost:8080/claims/mine -H "Authorization: Bearer $TOKEN"
 ```
 
-The password grant is enabled on the `expenses-cli` client only to make local testing easy. A real front end would use the authorization code flow with PKCE.
+The password grant is enabled on the `expenses-cli` client only to make local testing easy. The Angular app uses its own `expenses-web` client with the authorization code flow and PKCE.
+
+To use the front end as well:
+
+```bash
+cd web && npm install && npm start    # http://localhost:4200
+```
 
 ## Kubernetes
 
@@ -134,17 +152,19 @@ Errors come back as RFC 7807 problem details.
 - `KeycloakIntegrationTest` starts a real Keycloak with Testcontainers, logs in as alice and bob, and checks that real signed tokens work, roles are enforced, and a tampered token is rejected.
 - `ClaimApiTest` runs the whole app against a real Postgres, with test JWTs, and covers each rule in the table above.
 - `AuditChainTest` runs 40 claims through 8 threads and checks the chain is unbroken. It also checks that the trigger blocks edits, and that an edit made with the trigger turned off is caught.
+- `OpenApiContractTest` checks the served spec against `docs/openapi.json` and that it declares bearer auth.
 - `RateLimiterTest`, `KeycloakRoleConverterTest` and `AuditHashTest` are plain unit tests.
+- `cd web && npm test` runs the Angular tests (16, on Vitest): the token is only sent to the API, roles are read from the token, the claim form enforces the API's limits, and the approvals page handles 403 and 409 answers.
 
-GitHub Actions runs everything on every push, then deploys to kind and runs the smoke test.
+GitHub Actions runs the backend and front-end tests on every push, checks the generated TypeScript types still match the spec, then deploys to kind and runs the smoke test.
 
 ## Stack
 
-Kotlin 2.2 · Spring Boot 3.5 · Spring Security OAuth2 Resource Server · Keycloak 26 · PostgreSQL · Flyway · Testcontainers · Docker · Kubernetes · Gradle (Kotlin DSL) · GitHub Actions
+Kotlin 2.2 · Spring Boot 3.5 · Spring Security OAuth2 Resource Server · Keycloak 26 · springdoc OpenAPI · PostgreSQL · Flyway · Testcontainers · Angular 22 · TypeScript · Vitest · Docker · Kubernetes · Gradle (Kotlin DSL) · GitHub Actions
 
 ## What I'd change for production
 
 - Move the rate limit buckets to Redis so the limit holds across instances
 - Anchor the latest audit hash outside the database (WORM storage or a separate account)
-- Use the authorization code flow with PKCE for a real front end and turn off the password grant
+- Turn off the password grant on `expenses-cli` now that the front end uses the code flow
 - Add pagination to the list endpoints
